@@ -1,5 +1,5 @@
 \
-import os, re, io, datetime, textwrap, uuid
+import os, re, datetime, textwrap, uuid
 import requests
 from bs4 import BeautifulSoup
 from dateutil.tz import gettz
@@ -57,10 +57,13 @@ def parse_top(url, take=6):
 def og_image(url):
     try:
         h = fetch_html(url)
-        m = re.search(r'<meta[^>]+property=["\\']og:image["\\'][^>]+content=["\\']([^"\\']+)["\\']', h, re.I)
+        # Safe, simple quoting (no raw string edge cases)
+        pattern = "<meta[^>]+property=['\\\"]og:image['\\\"][^>]+content=['\\\"]([^'\\\"]+)['\\\"]"
+        m = re.search(pattern, h, re.I)
         if m:
             return m.group(1).replace("&amp;","&")
-    except Exception: pass
+    except Exception:
+        pass
     return ""
 
 def download_image(url, fname):
@@ -71,7 +74,8 @@ def download_image(url, fname):
             pth = os.path.join(OUT_DIR,fname)
             with open(pth,"wb") as f: f.write(r.content)
             return pth
-    except Exception: return None
+    except Exception:
+        return None
     return None
 
 def fetch_summary(article_url, max_len=30):
@@ -84,14 +88,14 @@ def fetch_summary(article_url, max_len=30):
         text = " ".join(p.get_text(" ", strip=True) for p in p_tags)
         if not text: return ""
         return text[:max_len] + "…" if len(text)>max_len else text
-    except Exception: return ""
+    except Exception:
+        return ""
 
 def default_gagline(title):
     return "오늘도 달수는 쿨~합니다!"
 
 def wrap(text, width=22):
-    import textwrap as tw
-    return "\\n".join(tw.wrap(text,width=width))
+    return "\n".join(textwrap.wrap(text,width=width))
 
 def make_slide(img_path, title, dur, caption=None):
     base = Image.new("RGB",(W,H),"black")
@@ -113,7 +117,7 @@ def make_slide(img_path, title, dur, caption=None):
         draw.multiline_text((60,80), wrap(title,18), fill="white", font=font_title, stroke_fill="black", stroke_width=3)
     if caption:
         draw.multiline_text((60,H-400), wrap(caption,20), fill="white", font=font_body, stroke_fill="black", stroke_width=2)
-    # Save to temp file path (MoviePy needs a path or numpy array)
+    # Save to temp file for MoviePy
     os.makedirs(OUT_DIR, exist_ok=True)
     tmp_path = os.path.join(OUT_DIR, f"slide_{uuid.uuid4().hex}.png")
     base.save(tmp_path, format="PNG")
@@ -132,7 +136,7 @@ def main():
         it["summary"]=fetch_summary(it["url"])
         it["gag"]=default_gagline(it["title"])
 
-    # Script (MD)
+    # MD (full script)
     md_lines=["## 🎬 인트로","안녕하십니까, 수달 아나운서 달수입니다.","오늘의 뉴스를 전해드리겠습니다.",""]
     for i,it in enumerate(items,1):
         md_lines += [f"### 뉴스 {i}",
@@ -141,27 +145,27 @@ def main():
                      f"- 능청 멘트: {it['gag']}",""]
     md_lines+=["## 🎤 클로징","지금까지 달수 뉴스였습니다.","내일도 쿨~하게 소식 전해드리겠습니다."]
     with open(os.path.join(OUT_DIR,f"Dalsu_{date}.md"),"w",encoding="utf-8") as f:
-        f.write("\\n".join(md_lines))
+        f.write("\n".join(md_lines))
 
-    # SRT
+    # SRT (short captions only: summary + gag)
     def srt_time(sec):
         h=sec//3600; m=(sec%3600)//60; s=sec%60
         return f"{h:02d}:{m:02d}:{s:02d},000"
     idx,t=1,0; srt_blocks=[]
-    srt_blocks.append(f"{idx}\\n{srt_time(t)} --> {srt_time(t+INTRO_SEC)}\\n안녕하십니까\\n수달 아나운서 달수입니다.\\n오늘의 뉴스를 전해드리겠습니다.\\n")
+    srt_blocks.append(f"{idx}\n{srt_time(t)} --> {srt_time(t+INTRO_SEC)}\n안녕하십니까\n수달 아나운서 달수입니다.\n오늘의 뉴스를 전해드리겠습니다.\n")
     idx+=1; t+=INTRO_SEC
     for i,it in enumerate(items,1):
-        srt_blocks.append(f"{idx}\\n{srt_time(t)} --> {srt_time(t+it['sec'])}\\n{it['summary']}\\n{it['gag']}\\n")
+        srt_blocks.append(f"{idx}\n{srt_time(t)} --> {srt_time(t+it['sec'])}\n{it['summary']}\n{it['gag']}\n")
         idx+=1; t+=it['sec']
-    srt_blocks.append(f"{idx}\\n{srt_time(t)} --> {srt_time(t+CLOSING_SEC)}\\n지금까지 달수 뉴스였습니다.\\n내일도 쿨~하게 소식 전해드리겠습니다.\\n")
+    srt_blocks.append(f"{idx}\n{srt_time(t)} --> {srt_time(t+CLOSING_SEC)}\n지금까지 달수 뉴스였습니다.\n내일도 쿨~하게 소식 전해드리겠습니다.\n")
     with open(os.path.join(OUT_DIR,f"Dalsu_{date}.srt"),"w",encoding="utf-8") as f:
-        f.write("\\n".join(srt_blocks))
+        f.write("\n".join(srt_blocks))
 
-    # Video
+    # Video compose
     intro_img=os.path.join(ASSETS,"intro.png")
     outro_img=os.path.join(ASSETS,"outro.png")
     intro_clip=make_slide(intro_img,"달수 뉴스룸",INTRO_SEC,"오늘의 뉴스를 전해드립니다.")
-    news_clips=[make_slide(it["img_file"],"",it["sec"], f"{it['summary']}\\n{it['gag']}") for it in items]
+    news_clips=[make_slide(it["img_file"],"",it["sec"], f"{it['summary']}\n{it['gag']}") for it in items]
     outro_clip=make_slide(outro_img,"지금까지 달수 뉴스였습니다",CLOSING_SEC,"내일도 쿨~하게 소식 전해드리겠습니다.")
     final=concatenate_videoclips([intro_clip,*news_clips,outro_clip],method="compose")
     outmp4=os.path.join(OUT_DIR,f"Dalsu_{date}.mp4")
