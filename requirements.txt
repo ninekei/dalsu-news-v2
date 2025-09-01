@@ -4,4 +4,4 @@ lxml
 python-dateutil
 Pillow
 moviepy==1.0.3
-openai
+numpy
