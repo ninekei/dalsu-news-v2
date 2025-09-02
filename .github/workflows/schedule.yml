@@ -1,26 +1,42 @@
 name: Dalsu Daily
 on:
   schedule:
-    - cron: "5 0 * * *"  # UTC 00:05 = 한국 시간 09:05
+    - cron: "5 0 * * *"   # KST 09:05 실행(러너 UTC 기준 00:05)
   workflow_dispatch:
 
 jobs:
   run:
     runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Seoul
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install deps
+
+      - name: Install deps (ffmpeg + KR fonts)
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg fonts-noto-cjk fonts-nanum
           pip install -r requirements.txt
+
+      - name: Debug env
+        run: |
+          python -V
+          ffmpeg -version | head -n 1 || true
+          fc-list | grep -i "noto\|nanum\|apple\|malgun" || true
+
       - name: Run pipeline
         run: python main.py
-      - name: Upload artifacts
+        continue-on-error: true   # ← 실패해도 다음 단계로 진행
+
+      - name: Upload artifacts (always)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dalsu-news-output
-          path: out/*
+          path: |
+            out/*
+            !out/*.tmp
